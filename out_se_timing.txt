@@ -1,0 +1,12 @@
+gem5 Simulator System.  http://gem5.org
+gem5 is copyrighted software; use the --copyright option for details.
+
+gem5 compiled Apr 22 2020 19:58:47
+gem5 started Apr 22 2020 20:33:53
+gem5 executing on DESKTOP-9Q15VJ6, pid 7350
+command line: build/X86/gem5.opt configs/example/se.py --cmd=tests/test-progs/hello/bin/x86/linux/hello
+
+Global frequency set at 1000000000000 ticks per second
+**** REAL SIMULATION ****
+Hello world!
+Exiting @ tick 5941500 because exiting with last active thread context
