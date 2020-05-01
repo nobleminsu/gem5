@@ -2,5 +2,6 @@ Import('*')
 
 SimObject('HelloObject2.py')
 Source('hello_object2.cc')
+Source('goodbye_object2.cc')
 
 DebugFlag('Hello')
