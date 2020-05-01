@@ -2,10 +2,12 @@
 
 #include <iostream>
 
+#include "debug/Hello.hh"
+
 HelloObject2::HelloObject2(HelloObject2Params *params) :
     SimObject(params)
 {
-    std::cout << "Hello World! From a SimObject!" << std::endl;
+    DPRINTF(Hello, "Created the hello object\n");
 }
 
 HelloObject2*
