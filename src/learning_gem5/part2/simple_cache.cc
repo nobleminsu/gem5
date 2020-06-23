@@ -35,12 +35,12 @@
 #include "sim/system.hh"
 
 SimpleCache::SimpleCache(SimpleCacheParams *params) :
-    ClockedObject(params),
+    MemObject(params),
     latency(params->latency),
     blockSize(params->system->cacheLineSize()),
     capacity(params->size / blockSize),
     memPort(params->name + ".mem_side", this),
-    blocked(false), originalPacket(nullptr), waitingPortId(-1)
+    blocked(false), outstandingPacket(nullptr), waitingPortId(-1)
 {
     // Since the CPU side ports are a vector of ports, create an instance of
     // the CPUSidePort for each connection. This member of params is
@@ -51,20 +51,18 @@ SimpleCache::SimpleCache(SimpleCacheParams *params) :
     }
 }
 
-Port &
-SimpleCache::getPort(const std::string &if_name, PortID idx)
+Port&
+SimpleCache::getPort(const std::string& if_name, PortID idx)
 {
-    // This is the name from the Python SimObject declaration in SimpleCache.py
-    if (if_name == "mem_side") {
-        panic_if(idx != InvalidPortID,
-                 "Mem side of simple cache not a vector port");
-        return memPort;
-    } else if (if_name == "cpu_side" && idx < cpuPorts.size()) {
+    // This is the name from the Python SimObject declaration (SimpleMemobj.py)
+    if (if_name == "cpu_side" && idx < cpuPorts.size()) {
         // We should have already created all of the ports in the constructor
         return cpuPorts[idx];
+    } else if (if_name == "mem_side") {
+        return memPort;
     } else {
         // pass it along to our super class
-        return ClockedObject::getPort(if_name, idx);
+        return MemObject::getPort(if_name, idx);
     }
 }
 
@@ -206,9 +204,7 @@ SimpleCache::handleRequest(PacketPtr pkt, int port_id)
     waitingPortId = port_id;
 
     // Schedule an event after cache access latency to actually access
-    schedule(new EventFunctionWrapper([this, pkt]{ accessTiming(pkt); },
-                                      name() + ".accessEvent", true),
-             clockEdge(latency));
+    schedule(new AccessEvent(this, pkt), clockEdge(latency));
 
     return true;
 }
@@ -225,18 +221,16 @@ SimpleCache::handleResponse(PacketPtr pkt)
 
     missLatency.sample(curTick() - missTime);
 
-    // If we had to upgrade the request packet to a full cache line, now we
-    // can use that packet to construct the response.
-    if (originalPacket != nullptr) {
+    if (outstandingPacket != nullptr) {
         DPRINTF(SimpleCache, "Copying data from new packet to old\n");
         // We had to upgrade a previous packet. We can functionally deal with
         // the cache access now. It better be a hit.
-        bool hit M5_VAR_USED = accessFunctional(originalPacket);
+        bool hit M5_VAR_USED = accessFunctional(outstandingPacket);
         panic_if(!hit, "Should always hit after inserting");
-        originalPacket->makeResponse();
+        outstandingPacket->makeResponse();
         delete pkt; // We may need to delay this, I'm not sure.
-        pkt = originalPacket;
-        originalPacket = nullptr;
+        pkt = outstandingPacket;
+        outstandingPacket = nullptr;
     } // else, pkt contains the data it needs
 
     sendResponse(pkt);
@@ -328,7 +322,7 @@ SimpleCache::accessTiming(PacketPtr pkt)
             assert(new_pkt->getAddr() == new_pkt->getBlockAddr(blockSize));
 
             // Save the old packet
-            originalPacket = pkt;
+            outstandingPacket = pkt;
 
             DPRINTF(SimpleCache, "forwarding packet\n");
             memPort.sendPacket(new_pkt);
@@ -380,15 +374,13 @@ SimpleCache::insert(PacketPtr pkt)
 
         // Write back the data.
         // Create a new request-packet pair
-        RequestPtr req = std::make_shared<Request>(
-            block->first, blockSize, 0, 0);
-
+        RequestPtr req(new Request(block->first, blockSize, 0, 0));
         PacketPtr new_pkt = new Packet(req, MemCmd::WritebackDirty, blockSize);
         new_pkt->dataDynamic(block->second); // This will be deleted later
 
         DPRINTF(SimpleCache, "Writing packet back %s\n", pkt->print());
         // Send the write to memory
-        memPort.sendPacket(new_pkt);
+        memPort.sendTimingReq(new_pkt);
 
         // Delete this entry
         cacheStore.erase(block->first);
@@ -427,7 +419,7 @@ void
 SimpleCache::regStats()
 {
     // If you don't do this you get errors about uninitialized stats.
-    ClockedObject::regStats();
+    MemObject::regStats();
 
     hits.name(name() + ".hits")
         .desc("Number of hits")

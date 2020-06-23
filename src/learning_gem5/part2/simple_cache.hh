@@ -33,10 +33,8 @@
 
 #include <unordered_map>
 
-#include "base/statistics.hh"
-#include "mem/port.hh"
+#include "mem/mem_object.hh"
 #include "params/SimpleCache.hh"
-#include "sim/clocked_object.hh"
 
 /**
  * A very simple cache object. Has a fully-associative data store with random
@@ -45,7 +43,7 @@
  * be outstanding at a time.
  * This cache is a writeback cache.
  */
-class SimpleCache : public ClockedObject
+class SimpleCache : public MemObject
 {
   private:
 
@@ -200,7 +198,7 @@ class SimpleCache : public ClockedObject
     bool handleRequest(PacketPtr pkt, int port_id);
 
     /**
-     * Handle the respone from the memory side. Called from the memory port
+     * Handle the response from the memory side. Called from the memory port
      * on a timing response.
      *
      * @param responding packet
@@ -282,7 +280,7 @@ class SimpleCache : public ClockedObject
 
     /// Packet that we are currently handling. Used for upgrading to larger
     /// cache line sizes
-    PacketPtr originalPacket;
+    PacketPtr outstandingPacket;
 
     /// The port to send the response when we recieve it back
     int waitingPortId;
@@ -292,6 +290,32 @@ class SimpleCache : public ClockedObject
 
     /// An incredibly simple cache storage. Maps block addresses to data
     std::unordered_map<Addr, uint8_t*> cacheStore;
+
+    /**
+     * Class for an event to delay handling a packet.
+     * Automatically deletes itself after process is called.
+     */
+    class AccessEvent : public Event
+    {
+      private:
+        /// Pointer to the cache object
+        SimpleCache *cache;
+
+        /// The packet we need to handle
+        PacketPtr pkt;
+      public:
+        AccessEvent(SimpleCache *cache, PacketPtr pkt) :
+            Event(Default_Pri, AutoDelete), cache(cache), pkt(pkt)
+        { }
+
+        /** Process the event. Just call into the cache.
+         */
+        void process() override {
+            cache->accessTiming(pkt);
+        }
+    };
+
+    friend class AccessEvent;
 
     /// Cache statistics
     Stats::Scalar hits;
@@ -308,15 +332,15 @@ class SimpleCache : public ClockedObject
     /**
      * Get a port with a given name and index. This is used at
      * binding time and returns a reference to a protocol-agnostic
-     * port.
+     * base master port.
      *
      * @param if_name Port name
      * @param idx Index in the case of a VectorPort
      *
      * @return A reference to the given port
      */
-    Port &getPort(const std::string &if_name,
-                  PortID idx=InvalidPortID) override;
+    Port& getPort(const std::string& if_name,
+                                  PortID idx = InvalidPortID) override;
 
     /**
      * Register the stats
