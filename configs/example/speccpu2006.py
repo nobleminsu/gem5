@@ -122,6 +122,8 @@ def get_processes(options):
 
 
 parser = optparse.OptionParser()
+parser.add_option('--l2tlb-size', type='int', default="128")
+parser.add_option('--l2tlb-way', type='int', default="2")
 
 
 Options.addCommonOptions(parser)
@@ -327,6 +329,9 @@ for i in range(np):
         # system.cpu[i].branchPred.indirectBranchPred = indirectBPClass()
 
     system.cpu[i].createThreads()
+
+    system.cpu[i].dtb.size_l2 = options.l2tlb_size
+    system.cpu[i].dtb.way_l2 = options.l2tlb_way
 
 
 

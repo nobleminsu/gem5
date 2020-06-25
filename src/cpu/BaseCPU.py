@@ -155,10 +155,10 @@ class BaseCPU(ClockedObject):
         "Wait for a remote GDB connection");
 
     workload = VectorParam.Process([], "processes to run")
-
+    
     if buildEnv['TARGET_ISA'] == 'x86':
         dtb = Param.BaseTLB(ArchDTB(), "Data TLB with L2")
-        // itb has no TLB
+        # itb has no TLB
         itb = Param.BaseTLB(ArchITB(size_l2=0), "Instruction TLB with L2")
     else:
         dtb = Param.BaseTLB(ArchDTB(), "Data TLB")

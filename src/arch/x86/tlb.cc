@@ -69,6 +69,8 @@ TLB::TLB(const Params *p)
     if (!size)
         fatal("TLBs must have a non-zero size.\n");
 
+    DPRINTF(L2TLB, "Configuring with L1 TLB=%dB, L2 TLB=%dB_%dway\n", size, size_l2, way_l2);
+
     for (int x = 0; x < size; x++) {
         tlb[x].trieHandle = NULL;
         freeList.push_back(&tlb[x]);
@@ -477,10 +479,11 @@ TLB::translate(const RequestPtr &req,
                 wrAccesses++;
             }
             if (!entry) {
-                DPRINTF(L2TLB, "Checking L2 TLB for"
-                        "address %#x at pc %#x.\n",
-                        vaddr, tc->instAddr());
-                entry = lookup_l2(vaddr);
+                // DPRINTF(L2TLB, "Checking L2 TLB for"
+                //         "address %#x at pc %#x.\n",
+                //         vaddr, tc->instAddr());
+                if (size_l2 > 0)
+                    entry = lookup_l2(vaddr);
 
                 if (!entry) {
                     DPRINTF(TLB, "Handling a TLB miss for "
@@ -519,7 +522,7 @@ TLB::translate(const RequestPtr &req,
                         DPRINTF(TLB, "Miss was serviced.\n");
                     }
                 } else {
-                    DPRINTF(L2TLB, "Hit!\n");
+                    // DPRINTF(L2TLB, "Hit!\n");
                 }
             }
 
