@@ -71,6 +71,7 @@ namespace X86ISA
         void takeOverFrom(BaseTLB *otlb) override {}
 
         TlbEntry *lookup(Addr va, bool update_lru = true);
+        TlbEntry *lookup_l2(Addr va, bool update_lru = true);
 
         void setConfigAddress(uint32_t addr);
 
@@ -100,6 +101,16 @@ namespace X86ISA
         uint64_t lruSeq;
 
         AddrRange m5opRange;
+        
+        uint32_t size_l2;
+        uint32_t way_l2;
+
+        std::vector<std::vector<TlbEntry>> tlb_l2;
+
+        std::vector<EntryList> freeList_l2;
+
+        std::vector<TlbEntryTrie> trie_l2;
+
 
         // Statistics
         Stats::Scalar rdAccesses;
@@ -116,6 +127,7 @@ namespace X86ISA
       public:
 
         void evictLRU();
+        void evictLRU_l2(int index);
 
         uint64_t
         nextSeq()
@@ -148,6 +160,7 @@ namespace X86ISA
                                Mode mode) const override;
 
         TlbEntry *insert(Addr vpn, const TlbEntry &entry);
+        TlbEntry *insert_l2(Addr vpn, const TlbEntry &entry);
 
         /*
          * Function to register Stats

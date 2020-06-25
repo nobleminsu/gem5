@@ -372,6 +372,8 @@ def addSEOptions(parser):
                               around the entire string""")
     parser.add_option("-e", "--env", default="",
                       help="Initialize workload environment from text file.")
+    parser.add_option("-b", "--benchmark", default="",
+                      help="The benchmark to be loaded.")
     parser.add_option("-i", "--input", default="",
                       help="Read stdin from a file.")
     parser.add_option("--output", default="",

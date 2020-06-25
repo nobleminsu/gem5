@@ -50,6 +50,7 @@
 #include "base/trace.hh"
 #include "cpu/thread_context.hh"
 #include "debug/TLB.hh"
+#include "debug/L2TLB.hh"
 #include "mem/packet_access.hh"
 #include "mem/page_table.hh"
 #include "mem/request.hh"
@@ -61,7 +62,9 @@ namespace X86ISA {
 
 TLB::TLB(const Params *p)
     : BaseTLB(p), configAddress(0), size(p->size),
-      tlb(size), lruSeq(0), m5opRange(p->system->m5opRange())
+      tlb(size), lruSeq(0), m5opRange(p->system->m5opRange()),
+      size_l2(p->size_l2), way_l2(p->way_l2), tlb_l2(size_l2/way_l2, std::vector<TlbEntry>(way_l2)),
+      freeList_l2(size_l2/way_l2), trie_l2(size_l2/way_l2)
 {
     if (!size)
         fatal("TLBs must have a non-zero size.\n");
@@ -69,6 +72,13 @@ TLB::TLB(const Params *p)
     for (int x = 0; x < size; x++) {
         tlb[x].trieHandle = NULL;
         freeList.push_back(&tlb[x]);
+    }
+
+    for (int i = 0; i < size_l2/way_l2; i++) {
+        for (int j = 0; j < way_l2; j++) {
+            tlb_l2[i][j].trieHandle = NULL;
+            freeList_l2[i].push_back(&tlb_l2[i][j]);
+        }    
     }
 
     walker = p->walker;
@@ -93,6 +103,23 @@ TLB::evictLRU()
     freeList.push_back(&tlb[lru]);
 }
 
+void
+TLB::evictLRU_l2(int index)
+{
+    if (size_l2 == 0) return;
+
+    unsigned lru = 0;
+    for (unsigned i = 1; i < way_l2; i++) {
+        if (tlb_l2[index][i].lruSeq < tlb_l2[index][lru].lruSeq)
+            lru = i;
+    }
+
+    assert(tlb_l2[index][lru].trieHandle);
+    trie_l2[index].remove(tlb_l2[index][lru].trieHandle);
+    tlb_l2[index][lru].trieHandle = NULL;
+    freeList_l2[index].push_back(&tlb_l2[index][lru]);
+}
+
 TlbEntry *
 TLB::insert(Addr vpn, const TlbEntry &entry)
 {
@@ -114,13 +141,57 @@ TLB::insert(Addr vpn, const TlbEntry &entry)
     newEntry->vaddr = vpn;
     newEntry->trieHandle =
     trie.insert(vpn, TlbEntryTrie::MaxBits - entry.logBytes, newEntry);
+
+    // check L2 insertion
+    insert_l2(vpn, entry);
+
     return newEntry;
+}
+
+TlbEntry *
+TLB::insert_l2(Addr vpn, const TlbEntry &entry)
+{
+    if (size_l2 == 0) return NULL;
+
+    unsigned index = (vpn >> PageShift) % (size_l2/way_l2);
+    TlbEntry *newL2Entry = trie_l2[index].lookup(vpn);
+    if (newL2Entry) {
+        assert(newL2Entry->vaddr == vpn);
+        return newL2Entry;
+    }
+
+    if (freeList_l2[index].empty())
+        evictLRU_l2(index);
+
+    newL2Entry = freeList_l2[index].front();
+    freeList_l2[index].pop_front();
+
+    *newL2Entry = entry;
+    newL2Entry->lruSeq = nextSeq();
+    newL2Entry->vaddr = vpn;
+    newL2Entry->trieHandle =
+    trie_l2[index].insert(vpn, TlbEntryTrie::MaxBits - entry.logBytes, newL2Entry);
+
+
+    return newL2Entry;
 }
 
 TlbEntry *
 TLB::lookup(Addr va, bool update_lru)
 {
     TlbEntry *entry = trie.lookup(va);
+    if (entry && update_lru)
+        entry->lruSeq = nextSeq();
+    return entry;
+}
+
+TlbEntry *
+TLB::lookup_l2(Addr va, bool update_lru)
+{
+    if (size_l2 == 0) return NULL;
+
+    unsigned index = (va >> PageShift) % (size_l2/way_l2);
+    TlbEntry *entry = trie_l2[index].lookup(va);
     if (entry && update_lru)
         entry->lruSeq = nextSeq();
     return entry;
@@ -135,6 +206,16 @@ TLB::flushAll()
             trie.remove(tlb[i].trieHandle);
             tlb[i].trieHandle = NULL;
             freeList.push_back(&tlb[i]);
+        }
+    }
+
+    for (unsigned i = 0; i < size_l2/way_l2; i++) {
+        for (unsigned j = 0; j < way_l2; j++) {
+            if (tlb_l2[i][j].trieHandle) {
+                trie_l2[i].remove(tlb_l2[i][j].trieHandle);
+                tlb_l2[i][j].trieHandle = NULL;
+                freeList_l2[i].push_back(&tlb_l2[i][j]);
+            }
         }
     }
 }
@@ -156,6 +237,16 @@ TLB::flushNonGlobal()
             freeList.push_back(&tlb[i]);
         }
     }
+
+    for (unsigned i = 0; i < size_l2/way_l2; i++) {
+        for (unsigned j = 0; j < way_l2; j++) {
+            if (tlb_l2[i][j].trieHandle && !tlb_l2[i][j].global) {
+                trie_l2[i].remove(tlb_l2[i][j].trieHandle);
+                tlb_l2[i][j].trieHandle = NULL;
+                freeList_l2[i].push_back(&tlb[i]);
+            }
+        }
+    }
 }
 
 void
@@ -166,6 +257,14 @@ TLB::demapPage(Addr va, uint64_t asn)
         trie.remove(entry->trieHandle);
         entry->trieHandle = NULL;
         freeList.push_back(entry);
+    }
+
+    unsigned index = (va >> PageShift) % (size_l2/way_l2);
+    entry = trie_l2[index].lookup(va);
+    if (entry) {
+        trie_l2[index].remove(entry->trieHandle);
+        entry->trieHandle = NULL;
+        freeList_l2[index].push_back(entry);
     }
 }
 
@@ -378,40 +477,49 @@ TLB::translate(const RequestPtr &req,
                 wrAccesses++;
             }
             if (!entry) {
-                DPRINTF(TLB, "Handling a TLB miss for "
+                DPRINTF(L2TLB, "Checking L2 TLB for"
                         "address %#x at pc %#x.\n",
                         vaddr, tc->instAddr());
-                if (mode == Read) {
-                    rdMisses++;
-                } else {
-                    wrMisses++;
-                }
-                if (FullSystem) {
-                    Fault fault = walker->start(tc, translation, req, mode);
-                    if (timing || fault != NoFault) {
-                        // This gets ignored in atomic mode.
-                        delayedResponse = true;
-                        return fault;
-                    }
-                    entry = lookup(vaddr);
-                    assert(entry);
-                } else {
-                    Process *p = tc->getProcessPtr();
-                    const EmulationPageTable::Entry *pte =
-                        p->pTable->lookup(vaddr);
-                    if (!pte) {
-                        return std::make_shared<PageFault>(vaddr, true, mode,
-                                                           true, false);
+                entry = lookup_l2(vaddr);
+
+                if (!entry) {
+                    DPRINTF(TLB, "Handling a TLB miss for "
+                            "address %#x at pc %#x.\n",
+                            vaddr, tc->instAddr());
+                    if (mode == Read) {
+                        rdMisses++;
                     } else {
-                        Addr alignedVaddr = p->pTable->pageAlign(vaddr);
-                        DPRINTF(TLB, "Mapping %#x to %#x\n", alignedVaddr,
-                                pte->paddr);
-                        entry = insert(alignedVaddr, TlbEntry(
-                                p->pTable->pid(), alignedVaddr, pte->paddr,
-                                pte->flags & EmulationPageTable::Uncacheable,
-                                pte->flags & EmulationPageTable::ReadOnly));
+                        wrMisses++;
                     }
-                    DPRINTF(TLB, "Miss was serviced.\n");
+                    if (FullSystem) {
+                        Fault fault = walker->start(tc, translation, req, mode);
+                        if (timing || fault != NoFault) {
+                            // This gets ignored in atomic mode.
+                            delayedResponse = true;
+                            return fault;
+                        }
+                        entry = lookup(vaddr);
+                        assert(entry);
+                    } else {
+                        Process *p = tc->getProcessPtr();
+                        const EmulationPageTable::Entry *pte =
+                            p->pTable->lookup(vaddr);
+                        if (!pte) {
+                            return std::make_shared<PageFault>(vaddr, true, mode,
+                                                            true, false);
+                        } else {
+                            Addr alignedVaddr = p->pTable->pageAlign(vaddr);
+                            DPRINTF(TLB, "Mapping %#x to %#x\n", alignedVaddr,
+                                    pte->paddr);
+                            entry = insert(alignedVaddr, TlbEntry(
+                                    p->pTable->pid(), alignedVaddr, pte->paddr,
+                                    pte->flags & EmulationPageTable::Uncacheable,
+                                    pte->flags & EmulationPageTable::ReadOnly));
+                        }
+                        DPRINTF(TLB, "Miss was serviced.\n");
+                    }
+                } else {
+                    DPRINTF(L2TLB, "Hit!\n");
                 }
             }
 

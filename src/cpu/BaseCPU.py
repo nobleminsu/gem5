@@ -156,8 +156,13 @@ class BaseCPU(ClockedObject):
 
     workload = VectorParam.Process([], "processes to run")
 
-    dtb = Param.BaseTLB(ArchDTB(), "Data TLB")
-    itb = Param.BaseTLB(ArchITB(), "Instruction TLB")
+    if buildEnv['TARGET_ISA'] == 'x86':
+        dtb = Param.BaseTLB(ArchDTB(), "Data TLB with L2")
+        // itb has no TLB
+        itb = Param.BaseTLB(ArchITB(size_l2=0), "Instruction TLB with L2")
+    else:
+        dtb = Param.BaseTLB(ArchDTB(), "Data TLB")
+        itb = Param.BaseTLB(ArchITB(), "Instruction TLB")
     if buildEnv['TARGET_ISA'] == 'power':
         UnifiedTLB = Param.Bool(True, "Is this a Unified TLB?")
     interrupts = VectorParam.BaseInterrupts([], "Interrupt Controller")
