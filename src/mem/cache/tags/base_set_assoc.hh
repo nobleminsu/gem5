@@ -53,6 +53,7 @@
 
 #include "base/logging.hh"
 #include "base/types.hh"
+#include "debug/WayPartition.hh"
 #include "mem/cache/base.hh"
 #include "mem/cache/cache_blk.hh"
 #include "mem/cache/replacement_policies/base.hh"
@@ -83,6 +84,10 @@ class BaseSetAssoc : public BaseTags
 
     /** Replacement policy */
     BaseReplacementPolicy *replacementPolicy;
+
+    int wayPartition;
+
+    int firstCpuId = -1;
 
   public:
     /** Convenience typedef. */
@@ -164,12 +169,29 @@ class BaseSetAssoc : public BaseTags
      * @return Cache block to be replaced.
      */
     CacheBlk* findVictim(Addr addr, const bool is_secure,
-                         const std::size_t size,
+                         const std::size_t size, MasterID cpu_id,
                          std::vector<CacheBlk*>& evict_blks) override
     {
         // Get possible entries to be victimized
-        const std::vector<ReplaceableEntry*> entries =
+        std::vector<ReplaceableEntry*> entries =
             indexingPolicy->getPossibleEntries(addr);
+
+        // start way partition
+        if (wayPartition > -1) {
+            // if no cpu is assigned as the first cpu, assign one.
+            // if (firstCpuId == -1) {
+            //     firstCpuId = cpu_id;
+            // }
+            
+            // way partitioning
+            if (cpu_id == 0 || cpu_id == 5 || cpu_id == 6) {
+                entries = std::vector<ReplaceableEntry*>(entries.begin(), entries.begin() + wayPartition);
+                DPRINTF(WayPartition, "master_id=%d, accessing first\n", cpu_id);
+            } else {
+                entries = std::vector<ReplaceableEntry*>(entries.begin() + wayPartition, entries.end());
+                DPRINTF(WayPartition, "master_id=%d, accessing second\n", cpu_id);
+            }
+        }
 
         // Choose replacement victim from replacement candidates
         CacheBlk* victim = static_cast<CacheBlk*>(replacementPolicy->getVictim(

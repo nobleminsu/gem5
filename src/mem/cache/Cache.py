@@ -98,6 +98,7 @@ class BaseCache(ClockedObject):
     prefetch_on_access = Param.Bool(False,
          "Notify the hardware prefetcher on every access (not just misses)")
 
+    way_partition = Param.Int(-1, "way partition, amount of ways the first cpu will get. -1 to disable")
     tags = Param.BaseTags(BaseSetAssoc(), "Tag store")
     replacement_policy = Param.BaseReplacementPolicy(LRURP(),
         "Replacement policy")

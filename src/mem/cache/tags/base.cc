@@ -48,6 +48,7 @@
 #include <cassert>
 
 #include "base/types.hh"
+#include "debug/WayPartition.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
 #include "mem/request.hh"
@@ -88,6 +89,9 @@ BaseTags::findBlock(Addr addr, bool is_secure) const
         CacheBlk* blk = static_cast<CacheBlk*>(location);
         if ((blk->tag == tag) && blk->isValid() &&
             (blk->isSecure() == is_secure)) {
+            if (entries.size() == 8) // temporary option for l2
+                DPRINTF(WayPartition, "accessing %p hit in way=%d\n", addr, 
+                    std::distance(entries.begin(), std::find(entries.begin(), entries.end(), blk)));
             return blk;
         }
     }

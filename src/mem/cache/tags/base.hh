@@ -276,7 +276,7 @@ class BaseTags : public ClockedObject
      * @return Cache block to be replaced.
      */
     virtual CacheBlk* findVictim(Addr addr, const bool is_secure,
-                                 const std::size_t size,
+                                 const std::size_t size, MasterID cpu_id,
                                  std::vector<CacheBlk*>& evict_blks) = 0;
 
     /**

@@ -6,7 +6,7 @@ from m5.objects import Process
 #Binary path for spec2006 binary 
 binary_dir = '/home/nobleminsu/calab_selection/SPECCPU2006_binary/'
 #Data path for spec2006 
-data_dir = '/home/nobleminsu/calab_selection/SPECCPU2006_input/'
+data_dir = '/home/nobleminsu/calab_selection/SPECCPU2006_input/benchspec/CPU2006/'
 
 
 #401.bzip2

@@ -52,12 +52,15 @@
 BaseSetAssoc::BaseSetAssoc(const Params *p)
     :BaseTags(p), allocAssoc(p->assoc), blks(p->size / p->block_size),
      sequentialAccess(p->sequential_access),
-     replacementPolicy(p->replacement_policy)
+     replacementPolicy(p->replacement_policy),
+     wayPartition(p->way_partition)
 {
     // Check parameters
     if (blkSize < 4 || !isPowerOf2(blkSize)) {
         fatal("Block size must be at least 4 and a power of 2");
     }
+
+    DPRINTF(WayPartition, "full way is %d, way partition is at %d\n", allocAssoc, wayPartition);
 }
 
 void

@@ -167,7 +167,7 @@ class SectorTags : public BaseTags
      * @return Cache block to be replaced.
      */
     CacheBlk* findVictim(Addr addr, const bool is_secure,
-                         const std::size_t size,
+                         const std::size_t size, MasterID cpu_id,
                          std::vector<CacheBlk*>& evict_blks) override;
 
     /**

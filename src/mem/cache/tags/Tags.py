@@ -82,6 +82,8 @@ class BaseSetAssoc(BaseTags):
     replacement_policy = Param.BaseReplacementPolicy(
         Parent.replacement_policy, "Replacement policy")
 
+    way_partition = Param.Int(Parent.way_partition, "way partition")
+
 class SectorTags(BaseTags):
     type = 'SectorTags'
     cxx_header = "mem/cache/tags/sector_tags.hh"

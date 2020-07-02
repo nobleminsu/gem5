@@ -126,7 +126,7 @@ def generate_process(process_id,benchmark):
 
     # you need to change these variables. 
     binary_dir = '/home/nobleminsu/calab_selection/SPECCPU2006_binary/'
-    data_dir = '/home/nobleminsu/calab_selection/SPECCPU2006_input/'
+    data_dir = '/home/nobleminsu/calab_selection/SPECCPU2006_input/benchspec/CPU2006/'
 
 
     process=Process(pid= process_id)
@@ -192,6 +192,7 @@ def make_workloads(options):
 
 parser = optparse.OptionParser()
 
+parser.add_option("--way-partition", type='int', default="-1")
 
 Options.addCommonOptions(parser)
 Options.addSEOptions(parser)
@@ -381,6 +382,9 @@ else:
     CacheConfig.config_cache(options, system)
     MemConfig.config_mem(options, system)
     config_filesystem(system, options)
+
+if options.num_cpus == 2:
+    system.l2.way_partition = options.way_partition
 
 root = Root(full_system = False, system = system)
 Simulation.run(options, root, system, FutureClass)

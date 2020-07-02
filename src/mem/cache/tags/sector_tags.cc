@@ -220,7 +220,7 @@ SectorTags::findBlock(Addr addr, bool is_secure) const
 }
 
 CacheBlk*
-SectorTags::findVictim(Addr addr, const bool is_secure, const std::size_t size,
+SectorTags::findVictim(Addr addr, const bool is_secure, const std::size_t size, MasterID cpu_id,
                        std::vector<CacheBlk*>& evict_blks)
 {
     // Get possible entries to be victimized

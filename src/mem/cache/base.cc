@@ -52,6 +52,7 @@
 #include "debug/CachePort.hh"
 #include "debug/CacheRepl.hh"
 #include "debug/CacheVerbose.hh"
+#include "debug/WayPartition.hh"
 #include "mem/cache/compressors/base.hh"
 #include "mem/cache/mshr.hh"
 #include "mem/cache/prefetch/base.hh"
@@ -1037,6 +1038,9 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
                   "Should never see a write in a read-only cache %s\n",
                   name());
 
+    if (dataLatency == 20) // to check l2
+        DPRINTF(WayPartition, "master_id=%d, accessing %p\n", pkt->req->masterId(), pkt->getAddr());
+
     // Access block in the tags
     Cycles tag_latency(0);
     blk = tags->accessBlock(pkt->getAddr(), pkt->isSecure(), tag_latency);
@@ -1425,9 +1429,11 @@ BaseCache::allocateBlock(const PacketPtr pkt, PacketList &writebacks)
                              decompression_lat, blk_size_bits);
     }
 
+    MasterID masterId = pkt->req->masterId();
+
     // Find replacement victim
     std::vector<CacheBlk*> evict_blks;
-    CacheBlk *victim = tags->findVictim(addr, is_secure, blk_size_bits,
+    CacheBlk *victim = tags->findVictim(addr, is_secure, blk_size_bits, masterId,
                                         evict_blks);
 
     // It is valid to return nullptr if there is no victim
